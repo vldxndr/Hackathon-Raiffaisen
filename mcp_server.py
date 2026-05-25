@@ -1,39 +1,48 @@
-import pickle
-import pickle
+import json
 import joblib
 import pandas as pd
 from fastmcp import FastMCP
 
 mcp = FastMCP("Laptop Price Predictor")
 
-# ── încărcare modele ──────────────────────────────────────────────────────────
-with open("models/laptop_price_catboost.pth", "rb") as _f:
-    _catboost = pickle.load(_f)
-
 MODELS = {
-    "ridge": joblib.load("models/ridge_model.pkl"),
-    "random_forest": joblib.load("models/random_forest_model.pkl"),
-    "gradient_boosting": joblib.load("models/gradient_boosting_model.pkl"),
-    "catboost": _catboost,
+    "original": {
+        "ridge":             joblib.load("models/original_ridge_regression.pth"),
+        "random_forest":     joblib.load("models/original_random_forest.pth"),
+        "gradient_boosting": joblib.load("models/original_gradient_boosting.pth"),
+        "catboost":          joblib.load("models/original_catboost.pth"),
+    },
+    "realistic": {
+        "ridge":             joblib.load("models/realistic_ridge.pth"),
+        "random_forest":     joblib.load("models/realistic_rf.pth"),
+        "gradient_boosting": joblib.load("models/realistic_gbr.pth"),
+        "catboost":          joblib.load("models/realistic_catboost.pth"),
+    },
 }
 
-with open("models/all_metrics.pkl", "rb") as f:
-    ALL_METRICS = pickle.load(f)
+_meta_orig = joblib.load("models/original_metadata.pth")
+_meta_real = joblib.load("models/realistic_metadata.pth")
 
-with open("models/laptop_price_metadata.pth", "rb") as f:
-    _cb_meta = pickle.load(f)
-
-ALL_METRICS["catboost"] = {
-    "MAE": round(_cb_meta["metrics"]["MAE"], 2),
-    "RMSE": round(float(_cb_meta["metrics"]["RMSE"]), 2),
-    "R2": round(float(_cb_meta["metrics"]["R²"]), 4),
+ALL_METRICS = {
+    "original": {
+        "ridge":             _meta_orig["metrics"].get("Ridge Regression", {}),
+        "random_forest":     _meta_orig["metrics"].get("Random Forest", {}),
+        "gradient_boosting": _meta_orig["metrics"].get("Gradient Boosting", {}),
+        "catboost":          _meta_orig["metrics"].get("CatBoost", {}),
+    },
+    "realistic": {
+        "ridge":             _meta_real["metrics"].get("ridge", {}),
+        "random_forest":     _meta_real["metrics"].get("rf", {}),
+        "gradient_boosting": _meta_real["metrics"].get("gbr", {}),
+        "catboost":          _meta_real["metrics"].get("catboost", {}),
+    },
 }
 
 MODEL_DISPLAY_NAMES = {
-    "ridge": "Ridge Regression",
-    "random_forest": "Random Forest",
+    "ridge":             "Ridge Regression",
+    "random_forest":     "Random Forest",
     "gradient_boosting": "Gradient Boosting",
-    "catboost": "CatBoost",
+    "catboost":          "CatBoost",
 }
 
 
@@ -41,20 +50,20 @@ def _build_input(brand, processor, ram_gb, storage_gb, screen_size,
                  graphics_card, operating_system, weight_kg,
                  battery_life_hours, warranty_years) -> pd.DataFrame:
     return pd.DataFrame([{
-        "Brand": brand,
-        "Processor": processor,
-        "RAM (GB)": ram_gb,
-        "Storage (GB)": storage_gb,
+        "Brand":                brand,
+        "Processor":            processor,
+        "RAM (GB)":             ram_gb,
+        "Storage (GB)":         storage_gb,
         "Screen Size (inches)": screen_size,
-        "Graphics Card": graphics_card,
-        "Operating System": operating_system,
-        "Weight (kg)": weight_kg,
+        "Graphics Card":        graphics_card,
+        "Operating System":     operating_system,
+        "Weight (kg)":          weight_kg,
         "Battery Life (hours)": battery_life_hours,
-        "Warranty (years)": warranty_years,
+        "Warranty (years)":     warranty_years,
     }])
 
 
-# ── TOOL: predicție preț ─────────────────────────────────────────────────────
+# ── TOOL: predicție preț ──────────────────────────────────────────────────────
 @mcp.tool()
 def predict_laptop_price(
     brand: str,
@@ -68,6 +77,7 @@ def predict_laptop_price(
     battery_life_hours: float,
     warranty_years: int,
     model: str = "catboost",
+    dataset: str = "realistic",
 ) -> dict:
     """
     Estimează prețul unui laptop pe baza specificațiilor tehnice.
@@ -83,54 +93,80 @@ def predict_laptop_price(
         weight_kg: Greutatea în kg (ex: 1.8)
         battery_life_hours: Autonomia bateriei în ore (ex: 8.0)
         warranty_years: Perioada de garanție. Valori: 1, 2, 3
-        model: Modelul ML de folosit. Valori: ridge, random_forest, gradient_boosting, catboost
+        model: Modelul ML. Valori: ridge, random_forest, gradient_boosting, catboost
+        dataset: Setul de date. Valori: original, realistic
     """
-    if model not in MODELS:
-        return {"error": f"Model necunoscut: '{model}'. Alege din: {list(MODELS.keys())}"}
+    if dataset not in MODELS:
+        return {"error": f"Dataset necunoscut: '{dataset}'. Alege din: {list(MODELS.keys())}"}
+    if model not in MODELS[dataset]:
+        return {"error": f"Model necunoscut: '{model}'. Alege din: {list(MODELS[dataset].keys())}"}
 
     input_df = _build_input(
         brand, processor, ram_gb, storage_gb, screen_size_inches,
         graphics_card, operating_system, weight_kg, battery_life_hours, warranty_years,
     )
-
-    price = float(MODELS[model].predict(input_df)[0])
+    price = float(MODELS[dataset][model].predict(input_df)[0])
     return {
         "predicted_price_usd": round(price, 2),
         "model_used": MODEL_DISPLAY_NAMES[model],
+        "dataset": dataset,
         "currency": "USD",
+    }
+
+
+# ── TOOL: statistici dataset ──────────────────────────────────────────────────
+@mcp.tool()
+def get_dataset_stats() -> dict:
+    """Returnează statistici despre piața de laptopuri: interval de prețuri, branduri, procesoare disponibile."""
+    df = pd.read_csv("laptop Price Prediction Dataset.csv")
+    return {
+        "price_min":      round(df["Price ($)"].min(), 2),
+        "price_max":      round(df["Price ($)"].max(), 2),
+        "price_mean":     round(df["Price ($)"].mean(), 2),
+        "brands":         sorted(df["Brand"].unique().tolist()),
+        "processors":     sorted(df["Processor"].unique().tolist()),
+        "graphics_cards": sorted(df["Graphics Card"].unique().tolist()),
     }
 
 
 # ── RESOURCE: statistici dataset ─────────────────────────────────────────────
 @mcp.resource("dataset://stats")
-def dataset_stats() -> str:
-    """Statistici generale despre dataset-ul de laptopuri: prețuri, branduri, procesoare disponibile."""
+def dataset_stats_resource() -> str:
+    """Statistici generale despre dataset-ul de laptopuri."""
     df = pd.read_csv("laptop Price Prediction Dataset.csv")
     stats = {
-        "total_records": len(df),
+        "total_records":     len(df),
         "price_stats": {
-            "min": round(df["Price ($)"].min(), 2),
-            "max": round(df["Price ($)"].max(), 2),
+            "min":  round(df["Price ($)"].min(), 2),
+            "max":  round(df["Price ($)"].max(), 2),
             "mean": round(df["Price ($)"].mean(), 2),
-            "std": round(df["Price ($)"].std(), 2),
+            "std":  round(df["Price ($)"].std(), 2),
         },
-        "brands": sorted(df["Brand"].unique().tolist()),
-        "processors": sorted(df["Processor"].unique().tolist()),
-        "graphics_cards": sorted(df["Graphics Card"].unique().tolist()),
-        "operating_systems": sorted(df["Operating System"].unique().tolist()),
-        "ram_options_gb": sorted(df["RAM (GB)"].unique().tolist()),
+        "brands":             sorted(df["Brand"].unique().tolist()),
+        "processors":         sorted(df["Processor"].unique().tolist()),
+        "graphics_cards":     sorted(df["Graphics Card"].unique().tolist()),
+        "operating_systems":  sorted(df["Operating System"].unique().tolist()),
+        "ram_options_gb":     sorted(df["RAM (GB)"].unique().tolist()),
         "storage_options_gb": sorted(df["Storage (GB)"].unique().tolist()),
     }
-    return str(stats)
+    return json.dumps(stats, indent=2)
 
 
 # ── RESOURCE: metrici modele ──────────────────────────────────────────────────
 @mcp.resource("models://metrics")
-def model_metrics() -> str:
+def model_metrics_resource() -> str:
     """Metricile de performanță (MAE, RMSE, R²) pentru fiecare model ML disponibil."""
     lines = []
-    for key, metrics in ALL_METRICS.items():
-        lines.append(f"{MODEL_DISPLAY_NAMES[key]}: MAE={metrics['MAE']}, RMSE={metrics['RMSE']}, R²={metrics['R2']}")
+    for dataset_key, models in ALL_METRICS.items():
+        lines.append(f"\n=== Dataset: {dataset_key} ===")
+        for model_key, metrics in models.items():
+            r2 = metrics.get("R2", metrics.get("R²", "N/A"))
+            lines.append(
+                f"{MODEL_DISPLAY_NAMES[model_key]}: "
+                f"MAE={metrics.get('MAE', 'N/A')}, "
+                f"RMSE={metrics.get('RMSE', 'N/A')}, "
+                f"R²={r2}"
+            )
     return "\n".join(lines)
 
 
