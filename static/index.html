@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Laptop Price Predictor</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -12,9 +13,11 @@
       background: #f0f2f5;
       min-height: 100vh;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       padding: 2rem;
+      gap: 1.5rem;
+      flex-wrap: wrap;
     }
 
     .card {
@@ -26,22 +29,23 @@
       max-width: 640px;
     }
 
-    h1 {
-      font-size: 1.5rem;
-      color: #1a1a2e;
-      margin-bottom: 0.25rem;
-    }
+    h1 { font-size: 1.5rem; color: #1a1a2e; margin-bottom: 0.25rem; }
 
-    .subtitle {
-      color: #666;
-      font-size: 0.9rem;
-      margin-bottom: 1.5rem;
+    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 1.25rem; }
+
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.4rem;
     }
 
     .model-tabs {
       display: flex;
       gap: 0.5rem;
-      margin-bottom: 1.5rem;
+      margin-bottom: 0.75rem;
     }
 
     .model-tab {
@@ -59,12 +63,10 @@
     }
 
     .model-tab:hover { border-color: #4f46e5; color: #4f46e5; }
+    .model-tab.active { border-color: #4f46e5; background: #4f46e5; color: white; }
 
-    .model-tab.active {
-      border-color: #4f46e5;
-      background: #4f46e5;
-      color: white;
-    }
+    .dataset-tabs .model-tab.active { background: #059669; border-color: #059669; }
+    .dataset-tabs .model-tab:not(.active):hover { border-color: #059669; color: #059669; }
 
     .grid {
       display: grid;
@@ -87,10 +89,7 @@
       background: white;
     }
 
-    select:focus, input:focus {
-      outline: none;
-      border-color: #4f46e5;
-    }
+    select:focus, input:focus { outline: none; border-color: #4f46e5; }
 
     button#predictBtn {
       width: 100%;
@@ -118,18 +117,8 @@
     }
 
     .result.visible { display: block; }
-
-    .result .price {
-      font-size: 2rem;
-      font-weight: 700;
-      color: #4f46e5;
-    }
-
-    .result .meta {
-      font-size: 0.85rem;
-      color: #666;
-      margin-top: 0.25rem;
-    }
+    .result .price { font-size: 2rem; font-weight: 700; color: #4f46e5; }
+    .result .meta { font-size: 0.85rem; color: #666; margin-top: 0.25rem; }
 
     .error {
       margin-top: 1rem;
@@ -143,112 +132,190 @@
     }
 
     .error.visible { display: block; }
+
+    /* ── Chat ── */
+    .chat-card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+      padding: 2rem;
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      height: fit-content;
+      min-height: 520px;
+    }
+
+    .chat-card h2 { font-size: 1.1rem; color: #1a1a2e; margin-bottom: 0.2rem; }
+    .chat-hint { font-size: 0.8rem; color: #888; margin-bottom: 1rem; }
+
+    .chat-suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .suggestion-chip {
+      padding: 0.3rem 0.75rem;
+      background: #f0f0f7;
+      border: 1px solid #d0d0e8;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      color: #4f46e5;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .suggestion-chip:hover { background: #e0e0f5; }
+
+    .chat-messages {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      max-height: 380px;
+      overflow-y: auto;
+      margin-bottom: 1rem;
+      padding-right: 0.25rem;
+    }
+
+    .chat-bubble {
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      font-size: 0.88rem;
+      line-height: 1.5;
+      max-width: 92%;
+      white-space: pre-wrap;
+    }
+
+    .chat-bubble.user { background: #4f46e5; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+    .chat-bubble.assistant { background: #f0f0f7; color: #222; align-self: flex-start; border-bottom-left-radius: 4px; }
+    .chat-bubble.thinking { background: #f0f0f7; color: #999; align-self: flex-start; font-style: italic; }
+
+    .chat-bubble.assistant h1,.chat-bubble.assistant h2,.chat-bubble.assistant h3 {
+      font-size: 0.95rem; font-weight: 700; margin: 0.5rem 0 0.25rem;
+    }
+    .chat-bubble.assistant p { margin: 0.2rem 0; }
+    .chat-bubble.assistant ul,.chat-bubble.assistant ol { padding-left: 1.2rem; margin: 0.25rem 0; }
+    .chat-bubble.assistant table { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin: 0.5rem 0; }
+    .chat-bubble.assistant th,.chat-bubble.assistant td { border: 1px solid #ccc; padding: 0.3rem 0.5rem; text-align: left; }
+    .chat-bubble.assistant th { background: #e8e8f5; font-weight: 600; }
+    .chat-bubble.assistant code { background: #e0e0ee; border-radius: 3px; padding: 0 3px; font-size: 0.85em; }
+    .chat-bubble.assistant strong { font-weight: 700; }
+
+    .chat-input-row { display: flex; gap: 0.5rem; }
+
+    .chat-input-row input {
+      flex: 1;
+      padding: 0.6rem 0.9rem;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+
+    .chat-send-btn {
+      padding: 0.6rem 1.1rem;
+      background: #4f46e5;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+
+    .chat-send-btn:hover { background: #4338ca; }
+    .chat-send-btn:disabled { background: #a5b4fc; cursor: not-allowed; }
+
+    @media (max-width: 700px) {
+      body { flex-direction: column; align-items: center; }
+      .chat-card { max-width: 640px; }
+    }
   </style>
 </head>
 <body>
+
+  <!-- ── Formular predicție ── -->
   <div class="card">
     <h1>Laptop Price Predictor</h1>
     <p class="subtitle">Estimează prețul unui laptop pe baza specificațiilor tehnice</p>
 
-    <div class="model-tabs">
-      <button class="model-tab active" data-model="ridge">Ridge Regression</button>
+    <div class="section-label">Set de date</div>
+    <div class="model-tabs dataset-tabs" style="margin-bottom:1rem">
+      <button class="model-tab active" data-dataset="realistic">Date Realiste</button>
+      <button class="model-tab" data-dataset="original">Date Originale</button>
+    </div>
+
+    <div class="section-label">Model ML</div>
+    <div class="model-tabs" style="margin-bottom:1.25rem">
+      <button class="model-tab active" data-model="catboost">CatBoost</button>
       <button class="model-tab" data-model="random_forest">Random Forest</button>
-      <button class="model-tab" data-model="gradient_boosting">Gradient Boosting</button>
-      <button class="model-tab" data-model="catboost">CatBoost</button>
+      <button class="model-tab" data-model="gradient_boosting">Grad. Boosting</button>
+      <button class="model-tab" data-model="ridge">Ridge</button>
     </div>
 
     <div class="grid">
       <div class="field">
         <label>Brand</label>
         <select id="Brand">
-          <option>Apple</option>
-          <option>Acer</option>
-          <option>Asus</option>
-          <option selected>Dell</option>
-          <option>HP</option>
-          <option>Lenovo</option>
-          <option>MSI</option>
-          <option>Razer</option>
+          <option>Apple</option><option>Acer</option><option>Asus</option>
+          <option selected>Dell</option><option>HP</option><option>Lenovo</option>
+          <option>MSI</option><option>Razer</option>
         </select>
       </div>
-
       <div class="field">
         <label>Procesor</label>
         <select id="Processor">
-          <option>Intel i5</option>
-          <option selected>Intel i7</option>
-          <option>Intel i9</option>
-          <option>AMD Ryzen 5</option>
-          <option>AMD Ryzen 7</option>
-          <option>AMD Ryzen 9</option>
+          <option>Intel i5</option><option selected>Intel i7</option><option>Intel i9</option>
+          <option>AMD Ryzen 5</option><option>AMD Ryzen 7</option><option>AMD Ryzen 9</option>
         </select>
       </div>
-
       <div class="field">
         <label>RAM (GB)</label>
         <select id="RAM_GB">
-          <option>8</option>
-          <option selected>16</option>
-          <option>32</option>
-          <option>64</option>
+          <option>8</option><option selected>16</option><option>32</option><option>64</option>
         </select>
       </div>
-
       <div class="field">
         <label>Storage (GB)</label>
         <select id="Storage_GB">
-          <option>256</option>
-          <option selected>512</option>
-          <option>1024</option>
-          <option>2048</option>
+          <option>256</option><option selected>512</option><option>1024</option><option>2048</option>
         </select>
       </div>
-
       <div class="field">
         <label>Placă video</label>
         <select id="Graphics_Card">
-          <option>Intel UHD</option>
-          <option>AMD Radeon</option>
-          <option>NVIDIA GTX 1650</option>
-          <option selected>NVIDIA RTX 3060</option>
-          <option>NVIDIA RTX 3070</option>
+          <option>Intel UHD</option><option>AMD Radeon</option><option>NVIDIA GTX 1650</option>
+          <option selected>NVIDIA RTX 3060</option><option>NVIDIA RTX 3070</option>
         </select>
       </div>
-
       <div class="field">
         <label>Sistem de operare</label>
         <select id="Operating_System">
-          <option>Linux</option>
-          <option>macOS</option>
-          <option>Windows 10</option>
+          <option>Linux</option><option>macOS</option><option>Windows 10</option>
           <option selected>Windows 11</option>
         </select>
       </div>
-
       <div class="field">
         <label>Diagonală ecran (inch)</label>
         <select id="Screen_Size_inches">
-          <option>13.3</option>
-          <option>14.0</option>
-          <option selected>15.6</option>
-          <option>17.0</option>
+          <option>13.3</option><option>14.0</option><option selected>15.6</option><option>17.0</option>
         </select>
       </div>
-
       <div class="field">
         <label>Garanție (ani)</label>
         <select id="Warranty_years">
-          <option>1</option>
-          <option selected>2</option>
-          <option>3</option>
+          <option>1</option><option selected>2</option><option>3</option>
         </select>
       </div>
-
       <div class="field">
         <label>Greutate (kg)</label>
         <input type="number" id="Weight_kg" value="1.8" step="0.1" min="1" max="4" />
       </div>
-
       <div class="field">
         <label>Autonomie baterie (ore)</label>
         <input type="number" id="Battery_Life_hours" value="8.0" step="0.5" min="1" max="20" />
@@ -261,25 +328,54 @@
       <div class="price" id="resultPrice"></div>
       <div class="meta" id="resultMeta"></div>
     </div>
-
     <div class="error" id="errorBox"></div>
   </div>
 
-  <script>
-    let selectedModel = 'ridge';
+  <!-- ── Chatbot ── -->
+  <div class="chat-card">
+    <h2>Asistent laptopuri</h2>
+    <p class="chat-hint">Întreabă-mă orice — buget, specificații, comparații.</p>
 
-    document.querySelectorAll('.model-tab').forEach(tab => {
+    <div class="chat-suggestions">
+      <span class="suggestion-chip" onclick="sendSuggestion(this)">Ce laptop gaming bun la $1200?</span>
+      <span class="suggestion-chip" onclick="sendSuggestion(this)">Merită 32GB RAM față de 16GB?</span>
+      <span class="suggestion-chip" onclick="sendSuggestion(this)">Cel mai ieftin cu RTX 3060?</span>
+      <span class="suggestion-chip" onclick="sendSuggestion(this)">Dell vs Lenovo la același preț?</span>
+    </div>
+
+    <div class="chat-messages" id="chatMessages"></div>
+
+    <div class="chat-input-row">
+      <input type="text" id="chatInput" placeholder="Scrie o întrebare..." />
+      <button class="chat-send-btn" id="chatSendBtn" onclick="sendChat()">Trimite</button>
+    </div>
+  </div>
+
+  <script>
+    // ── Formular ──────────────────────────────────────────────────────────────
+    let selectedModel   = 'catboost';
+    let selectedDataset = 'realistic';
+
+    document.querySelectorAll('[data-dataset]').forEach(tab => {
       tab.addEventListener('click', () => {
-        document.querySelectorAll('.model-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('[data-dataset]').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        selectedDataset = tab.dataset.dataset;
+      });
+    });
+
+    document.querySelectorAll('[data-model]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('[data-model]').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         selectedModel = tab.dataset.model;
       });
     });
 
     document.getElementById('predictBtn').addEventListener('click', async () => {
-      const btn = document.getElementById('predictBtn');
+      const btn       = document.getElementById('predictBtn');
       const resultBox = document.getElementById('result');
-      const errorBox = document.getElementById('errorBox');
+      const errorBox  = document.getElementById('errorBox');
 
       btn.disabled = true;
       btn.textContent = 'Se calculează...';
@@ -287,17 +383,18 @@
       errorBox.classList.remove('visible');
 
       const payload = {
-        Brand: document.getElementById('Brand').value,
-        Processor: document.getElementById('Processor').value,
-        RAM_GB: parseInt(document.getElementById('RAM_GB').value),
-        Storage_GB: parseInt(document.getElementById('Storage_GB').value),
-        Screen_Size_inches: parseFloat(document.getElementById('Screen_Size_inches').value),
-        Graphics_Card: document.getElementById('Graphics_Card').value,
-        Operating_System: document.getElementById('Operating_System').value,
-        Weight_kg: parseFloat(document.getElementById('Weight_kg').value),
-        Battery_Life_hours: parseFloat(document.getElementById('Battery_Life_hours').value),
-        Warranty_years: parseInt(document.getElementById('Warranty_years').value),
-        model: selectedModel,
+        Brand:               document.getElementById('Brand').value,
+        Processor:           document.getElementById('Processor').value,
+        RAM_GB:              parseInt(document.getElementById('RAM_GB').value),
+        Storage_GB:          parseInt(document.getElementById('Storage_GB').value),
+        Screen_Size_inches:  parseFloat(document.getElementById('Screen_Size_inches').value),
+        Graphics_Card:       document.getElementById('Graphics_Card').value,
+        Operating_System:    document.getElementById('Operating_System').value,
+        Weight_kg:           parseFloat(document.getElementById('Weight_kg').value),
+        Battery_Life_hours:  parseFloat(document.getElementById('Battery_Life_hours').value),
+        Warranty_years:      parseInt(document.getElementById('Warranty_years').value),
+        model:   selectedModel,
+        dataset: selectedDataset,
       };
 
       try {
@@ -306,15 +403,13 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.detail || 'Eroare server');
-        }
+        if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Eroare server'); }
 
         const data = await res.json();
-        document.getElementById('resultPrice').textContent = `$${data.predicted_price_usd.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
-        document.getElementById('resultMeta').textContent = `Model folosit: ${data.model_used}`;
+        document.getElementById('resultPrice').textContent =
+          `$${data.predicted_price_usd.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        document.getElementById('resultMeta').textContent =
+          `Model: ${data.model_used} | Date: ${data.dataset === 'realistic' ? 'Realiste' : 'Originale'}`;
         resultBox.classList.add('visible');
       } catch (e) {
         errorBox.textContent = `Eroare: ${e.message}`;
@@ -324,6 +419,66 @@
         btn.textContent = 'Estimează prețul';
       }
     });
+
+    // ── Chat ──────────────────────────────────────────────────────────────────
+    const chatHistory = [];
+
+    function appendBubble(role, text) {
+      const box = document.getElementById('chatMessages');
+      const el  = document.createElement('div');
+      el.className = `chat-bubble ${role}`;
+      if (role === 'assistant') {
+        el.innerHTML = marked.parse(text);
+      } else {
+        el.textContent = text;
+      }
+      box.appendChild(el);
+      box.scrollTop = box.scrollHeight;
+      return el;
+    }
+
+    function sendSuggestion(chip) {
+      document.getElementById('chatInput').value = chip.textContent;
+      sendChat();
+    }
+
+    document.getElementById('chatInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') sendChat();
+    });
+
+    async function sendChat() {
+      const input   = document.getElementById('chatInput');
+      const btn     = document.getElementById('chatSendBtn');
+      const message = input.value.trim();
+      if (!message) return;
+
+      input.value  = '';
+      btn.disabled = true;
+
+      appendBubble('user', message);
+      const thinking = appendBubble('thinking', 'Se gândește...');
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, history: chatHistory }),
+        });
+        if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Eroare server'); }
+
+        const data = await res.json();
+        thinking.remove();
+        chatHistory.push({ role: 'user',      content: message    });
+        chatHistory.push({ role: 'assistant', content: data.reply });
+        appendBubble('assistant', data.reply);
+      } catch (e) {
+        thinking.remove();
+        appendBubble('assistant', `Eroare: ${e.message}`);
+      } finally {
+        btn.disabled = false;
+        input.focus();
+      }
+    }
   </script>
 </body>
 </html>
