@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from typing import Literal, List, Optional
 from dotenv import load_dotenv
 import boto3
+from fastmcp import Client as MCPClient
 
 load_dotenv()
 
@@ -185,12 +186,14 @@ def predict(features: LaptopFeatures):
 
 # ── Chatbot ───────────────────────────────────────────────────────────────────
 
+MCP_URL = os.getenv("MCP_URL", "http://localhost:8001/sse")
+
 CHAT_TOOLS = [
     {
         "name": "predict_laptop_price",
         "description": (
             "Estimează prețul unui laptop pe baza specificațiilor tehnice. "
-            "Folosește 'realistic' pentru prețuri mai apropiate de piața reală, 'original' pentru datele inițiale de antrenament."
+            "Folosește dataset='realistic' pentru prețuri calibrate pe piața reală."
         ),
         "input_schema": {
             "type": "object",
@@ -202,67 +205,50 @@ CHAT_TOOLS = [
                 "screen_size_inches": {"type": "number",  "enum": [13.3, 14.0, 15.6, 17.0]},
                 "graphics_card":      {"type": "string",  "enum": ["Intel UHD", "AMD Radeon", "NVIDIA GTX 1650", "NVIDIA RTX 3060", "NVIDIA RTX 3070"]},
                 "operating_system":   {"type": "string",  "enum": ["Linux", "macOS", "Windows 10", "Windows 11"]},
-                "weight_kg":          {"type": "number",  "description": "Greutate in kg, ex: 1.8"},
-                "battery_life_hours": {"type": "number",  "description": "Autonomie baterie in ore, ex: 8.0"},
+                "weight_kg":          {"type": "number",  "description": "Greutate în kg, ex: 1.8"},
+                "battery_life_hours": {"type": "number",  "description": "Autonomie baterie în ore, ex: 8.0"},
                 "warranty_years":     {"type": "integer", "enum": [1, 2, 3]},
-                "model":              {"type": "string",  "enum": ["ridge", "random_forest", "gradient_boosting", "catboost"], "default": "catboost"},
-                "dataset":            {"type": "string",  "enum": ["original", "realistic"], "default": "realistic"},
+                "model":              {"type": "string",  "enum": ["ridge", "random_forest", "gradient_boosting", "catboost"]},
+                "dataset":            {"type": "string",  "enum": ["original", "realistic"]},
             },
             "required": ["brand", "processor", "ram_gb", "storage_gb", "screen_size_inches",
                          "graphics_card", "operating_system", "weight_kg", "battery_life_hours", "warranty_years"],
         },
     },
     {
-        "name": "get_dataset_stats",
-        "description": "Returnează statistici despre piața de laptopuri: interval de prețuri pentru datasetul original și cel realist, branduri disponibile.",
-        "input_schema": {"type": "object", "properties": {}},
+        "name": "search_laptops_in_budget",
+        "description": (
+            "Caută configurații de laptop care se încadrează într-un buget dat. "
+            "Returnează top 5 opțiuni ordonate descrescător după preț."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "budget_usd": {"type": "number", "description": "Bugetul maxim în USD, ex: 1200"},
+                "dataset":    {"type": "string", "enum": ["original", "realistic"]},
+                "model":      {"type": "string", "enum": ["ridge", "random_forest", "gradient_boosting", "catboost"]},
+            },
+            "required": ["budget_usd"],
+        },
     },
 ]
 
-SYSTEM_PROMPT = """Ești un asistent specializat în laptopuri. Ajuți userii să găsească laptopul potrivit bugetului și nevoilor lor.
-Ai acces la un model ML antrenat pe două seturi de date: 'realistic' (prețuri calibrate pe piața reală) și 'original' (datele brute de antrenament).
-Implicit folosește 'realistic' pentru recomandări. Răspunde în română, concis și util. Când compari configurații, prezintă rezultatele într-un tabel clar."""
+SYSTEM_PROMPT = """Ești un asistent specializat în laptopuri pentru Raiffeisen Bank. Ajuți utilizatorii să găsească laptopul potrivit bugetului și nevoilor lor.
+Ai acces la un model ML antrenat pe două seturi de date: 'realistic' (prețuri calibrate pe piața reală) și 'original' (datele brute).
+Implicit folosește 'realistic' și modelul 'catboost' pentru recomandări. Răspunde în română, concis și util.
+Când prezinți mai multe opțiuni, folosește un tabel markdown clar cu coloane: Brand, Procesor, RAM, GPU, Preț estimat."""
 
 
-def _run_tool(name: str, inputs: dict) -> str:
+async def _call_mcp_tool(name: str, inputs: dict) -> str:
+    """Apelează un tool din mcp_server.py via FastMCP Client (HTTP/SSE)."""
     try:
-        if name == "get_dataset_stats":
-            df = pd.read_csv("laptop Price Prediction Dataset.csv")
-            stats = {
-                "price_min":      round(df["Price ($)"].min(), 2),
-                "price_max":      round(df["Price ($)"].max(), 2),
-                "price_mean":     round(df["Price ($)"].mean(), 2),
-                "brands":         sorted(df["Brand"].unique().tolist()),
-                "processors":     sorted(df["Processor"].unique().tolist()),
-                "graphics_cards": sorted(df["Graphics Card"].unique().tolist()),
-            }
-            return json.dumps(stats)
-
-        if name == "predict_laptop_price":
-            input_df = pd.DataFrame([{
-                "Brand":                inputs["brand"],
-                "Processor":            inputs["processor"],
-                "RAM (GB)":             inputs["ram_gb"],
-                "Storage (GB)":         inputs["storage_gb"],
-                "Screen Size (inches)": inputs["screen_size_inches"],
-                "Graphics Card":        inputs["graphics_card"],
-                "Operating System":     inputs["operating_system"],
-                "Weight (kg)":          inputs["weight_kg"],
-                "Battery Life (hours)": inputs["battery_life_hours"],
-                "Warranty (years)":     inputs["warranty_years"],
-            }])
-            model_key   = inputs.get("model", "catboost")
-            dataset_key = inputs.get("dataset", "realistic")
-            price = float(MODELS[dataset_key][model_key].predict(input_df)[0])
-            return json.dumps({
-                "predicted_price_usd": round(price, 2),
-                "model_used": MODEL_DISPLAY_NAMES[model_key],
-                "dataset": dataset_key,
-            })
-
-        return json.dumps({"error": f"Tool necunoscut: {name}"})
+        async with MCPClient(MCP_URL) as client:
+            result = await client.call_tool(name, inputs)
+            if isinstance(result, list) and result:
+                return getattr(result[0], "text", str(result[0]))
+            return str(result)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": f"MCP server indisponibil: {str(e)}"})
 
 
 def _call_bedrock(messages: list, system: str) -> dict:
@@ -287,7 +273,7 @@ def _call_bedrock(messages: list, system: str) -> dict:
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
+async def chat(req: ChatRequest):
     messages = [{"role": m.role, "content": m.content} for m in (req.history or [])]
     messages.append({"role": "user", "content": req.message})
 
@@ -307,7 +293,8 @@ def chat(req: ChatRequest):
                 tool_results = []
                 for block in content:
                     if block.get("type") == "tool_use":
-                        result = _run_tool(block["name"], block["input"])
+                        # apelează mcp_server.py via HTTP, nu local
+                        result = await _call_mcp_tool(block["name"], block["input"])
                         tool_results.append({"type": "tool_result", "tool_use_id": block["id"], "content": result})
                 messages.append({"role": "user", "content": tool_results})
                 continue
@@ -320,4 +307,4 @@ def chat(req: ChatRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Eroare Bedrock: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare: {str(e)}")
