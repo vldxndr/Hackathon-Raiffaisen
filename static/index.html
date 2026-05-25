@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Laptop Price Predictor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+      padding: 2rem;
+      width: 100%;
+      max-width: 640px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      color: #1a1a2e;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      color: #666;
+      font-size: 0.9rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .model-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .model-tab {
+      flex: 1;
+      padding: 0.6rem;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      background: white;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #555;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .model-tab:hover { border-color: #4f46e5; color: #4f46e5; }
+
+    .model-tab.active {
+      border-color: #4f46e5;
+      background: #4f46e5;
+      color: white;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 0.3rem; }
+
+    label { font-size: 0.82rem; font-weight: 600; color: #444; }
+
+    select, input {
+      padding: 0.55rem 0.75rem;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      color: #222;
+      transition: border-color 0.2s;
+      background: white;
+    }
+
+    select:focus, input:focus {
+      outline: none;
+      border-color: #4f46e5;
+    }
+
+    button#predictBtn {
+      width: 100%;
+      padding: 0.85rem;
+      background: #4f46e5;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button#predictBtn:hover { background: #4338ca; }
+    button#predictBtn:disabled { background: #a5b4fc; cursor: not-allowed; }
+
+    .result {
+      margin-top: 1.25rem;
+      padding: 1.25rem;
+      background: #f5f3ff;
+      border-radius: 12px;
+      border-left: 4px solid #4f46e5;
+      display: none;
+    }
+
+    .result.visible { display: block; }
+
+    .result .price {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #4f46e5;
+    }
+
+    .result .meta {
+      font-size: 0.85rem;
+      color: #666;
+      margin-top: 0.25rem;
+    }
+
+    .error {
+      margin-top: 1rem;
+      padding: 0.85rem 1rem;
+      background: #fff0f0;
+      border-left: 4px solid #e53e3e;
+      border-radius: 8px;
+      color: #c53030;
+      font-size: 0.9rem;
+      display: none;
+    }
+
+    .error.visible { display: block; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Laptop Price Predictor</h1>
+    <p class="subtitle">Estimează prețul unui laptop pe baza specificațiilor tehnice</p>
+
+    <div class="model-tabs">
+      <button class="model-tab active" data-model="ridge">Ridge Regression</button>
+      <button class="model-tab" data-model="random_forest">Random Forest</button>
+      <button class="model-tab" data-model="gradient_boosting">Gradient Boosting</button>
+      <button class="model-tab" data-model="catboost">CatBoost</button>
+    </div>
+
+    <div class="grid">
+      <div class="field">
+        <label>Brand</label>
+        <select id="Brand">
+          <option>Apple</option>
+          <option>Acer</option>
+          <option>Asus</option>
+          <option selected>Dell</option>
+          <option>HP</option>
+          <option>Lenovo</option>
+          <option>MSI</option>
+          <option>Razer</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Procesor</label>
+        <select id="Processor">
+          <option>Intel i5</option>
+          <option selected>Intel i7</option>
+          <option>Intel i9</option>
+          <option>AMD Ryzen 5</option>
+          <option>AMD Ryzen 7</option>
+          <option>AMD Ryzen 9</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>RAM (GB)</label>
+        <select id="RAM_GB">
+          <option>8</option>
+          <option selected>16</option>
+          <option>32</option>
+          <option>64</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Storage (GB)</label>
+        <select id="Storage_GB">
+          <option>256</option>
+          <option selected>512</option>
+          <option>1024</option>
+          <option>2048</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Placă video</label>
+        <select id="Graphics_Card">
+          <option>Intel UHD</option>
+          <option>AMD Radeon</option>
+          <option>NVIDIA GTX 1650</option>
+          <option selected>NVIDIA RTX 3060</option>
+          <option>NVIDIA RTX 3070</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Sistem de operare</label>
+        <select id="Operating_System">
+          <option>Linux</option>
+          <option>macOS</option>
+          <option>Windows 10</option>
+          <option selected>Windows 11</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Diagonală ecran (inch)</label>
+        <select id="Screen_Size_inches">
+          <option>13.3</option>
+          <option>14.0</option>
+          <option selected>15.6</option>
+          <option>17.0</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Garanție (ani)</label>
+        <select id="Warranty_years">
+          <option>1</option>
+          <option selected>2</option>
+          <option>3</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Greutate (kg)</label>
+        <input type="number" id="Weight_kg" value="1.8" step="0.1" min="1" max="4" />
+      </div>
+
+      <div class="field">
+        <label>Autonomie baterie (ore)</label>
+        <input type="number" id="Battery_Life_hours" value="8.0" step="0.5" min="1" max="20" />
+      </div>
+    </div>
+
+    <button id="predictBtn">Estimează prețul</button>
+
+    <div class="result" id="result">
+      <div class="price" id="resultPrice"></div>
+      <div class="meta" id="resultMeta"></div>
+    </div>
+
+    <div class="error" id="errorBox"></div>
+  </div>
+
+  <script>
+    let selectedModel = 'ridge';
+
+    document.querySelectorAll('.model-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.model-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        selectedModel = tab.dataset.model;
+      });
+    });
+
+    document.getElementById('predictBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('predictBtn');
+      const resultBox = document.getElementById('result');
+      const errorBox = document.getElementById('errorBox');
+
+      btn.disabled = true;
+      btn.textContent = 'Se calculează...';
+      resultBox.classList.remove('visible');
+      errorBox.classList.remove('visible');
+
+      const payload = {
+        Brand: document.getElementById('Brand').value,
+        Processor: document.getElementById('Processor').value,
+        RAM_GB: parseInt(document.getElementById('RAM_GB').value),
+        Storage_GB: parseInt(document.getElementById('Storage_GB').value),
+        Screen_Size_inches: parseFloat(document.getElementById('Screen_Size_inches').value),
+        Graphics_Card: document.getElementById('Graphics_Card').value,
+        Operating_System: document.getElementById('Operating_System').value,
+        Weight_kg: parseFloat(document.getElementById('Weight_kg').value),
+        Battery_Life_hours: parseFloat(document.getElementById('Battery_Life_hours').value),
+        Warranty_years: parseInt(document.getElementById('Warranty_years').value),
+        model: selectedModel,
+      };
+
+      try {
+        const res = await fetch('/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Eroare server');
+        }
+
+        const data = await res.json();
+        document.getElementById('resultPrice').textContent = `$${data.predicted_price_usd.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        document.getElementById('resultMeta').textContent = `Model folosit: ${data.model_used}`;
+        resultBox.classList.add('visible');
+      } catch (e) {
+        errorBox.textContent = `Eroare: ${e.message}`;
+        errorBox.classList.add('visible');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Estimează prețul';
+      }
+    });
+  </script>
+</body>
+</html>
